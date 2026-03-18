@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect Four</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    /* ── Screens ─────────────────────────────────────────────────────────── */
+    .screen { display: none; flex-direction: column; align-items: center; width: 100%; padding: 24px 16px; }
+    .screen.active { display: flex; }
+
+    h1 {
+      font-size: 2rem;
+      letter-spacing: 3px;
+      margin-bottom: 6px;
+      color: #e0e0ff;
+      text-shadow: 0 0 20px rgba(100,100,255,0.5);
+    }
+
+    .subtitle { color: #888; font-size: 0.85rem; letter-spacing: 1px; margin-bottom: 32px; }
+
+    /* ── Menu buttons ────────────────────────────────────────────────────── */
+    .menu-btn {
+      width: 270px;
+      padding: 16px 20px;
+      margin: 7px 0;
+      border: none;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-align: left;
+      transition: transform 0.15s, box-shadow 0.15s;
+      color: #fff;
+    }
+    .menu-btn:hover  { transform: translateY(-2px); }
+    .menu-btn:active { transform: scale(0.96); }
+
+    .menu-btn.cpu    { background: linear-gradient(135deg,#42a5f5,#1565c0); box-shadow: 0 4px 15px rgba(21,101,192,.4); }
+    .menu-btn.local  { background: linear-gradient(135deg,#66bb6a,#2e7d32); box-shadow: 0 4px 15px rgba(46,125,50,.4); }
+    .menu-btn.online { background: linear-gradient(135deg,#ab47bc,#6a1b9a); box-shadow: 0 4px 15px rgba(106,27,154,.4); }
+
+    .menu-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .menu-sub  { font-size: 0.75rem; font-weight: 400; opacity: 0.8; margin-top: 2px; }
+
+    /* ── Online setup ────────────────────────────────────────────────────── */
+    .setup-card {
+      background: rgba(255,255,255,.07);
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin: 10px 0;
+      width: min(300px, 90vw);
+      text-align: center;
+    }
+    .setup-card h3 { color: #bbb; font-size: 1rem; margin-bottom: 14px; font-weight: 500; }
+
+    .room-code {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: 8px;
+      color: #ce93d8;
+      padding: 10px 0;
+      font-family: monospace;
+      min-height: 58px;
+    }
+
+    .code-hint { font-size: 0.78rem; color: #777; margin-top: 6px; }
+
+    input.room-input {
+      background: rgba(255,255,255,.1);
+      border: 2px solid rgba(255,255,255,.2);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: 6px;
+      text-align: center;
+      padding: 10px 8px;
+      width: 100%;
+      font-family: monospace;
+      outline: none;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    input.room-input:focus { border-color: #ab47bc; }
+
+    .action-btn {
+      padding: 11px 24px;
+      border: none;
+      border-radius: 25px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 8px;
+      transition: transform 0.15s;
+      letter-spacing: 0.5px;
+    }
+    .action-btn:active { transform: scale(0.95); }
+    .action-btn.primary   { background: linear-gradient(135deg,#ab47bc,#6a1b9a); color:#fff; box-shadow: 0 4px 15px rgba(106,27,154,.4); }
+    .action-btn.secondary { background: rgba(255,255,255,.1); color:#bbb; border:1px solid rgba(255,255,255,.15); }
+
+    .divider { color: #444; font-size: 0.85rem; margin: 6px 0; }
+
+    /* ── Connection status dot ───────────────────────────────────────────── */
+    .conn-row { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.82rem; color: #888; margin-top: 10px; min-height: 22px; }
+    .dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: #555; }
+    .dot-sm.connecting { background: #fdd835; animation: blink 1s infinite; }
+    .dot-sm.connected  { background: #66bb6a; }
+    .dot-sm.error      { background: #e53935; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Game screen ─────────────────────────────────────────────────────── */
+    #game-header { text-align: center; }
+
+    #online-badge {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    #online-badge.show { display: flex; }
+
+    #status {
+      font-size: 1.05rem;
+      margin: 10px 0 16px;
+      padding: 6px 20px;
+      background: rgba(255,255,255,.08);
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #status.p1   { color: #ff6b6b; }
+    #status.p2   { color: #ffd93d; }
+    #status.draw { color: #aaa; }
+    #status.win  { font-weight: bold; font-size: 1.2rem; }
+
+    /* Arrows above board */
+    #arrows { display: flex; margin-bottom: 4px; }
+    .arrow-cell {
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; opacity: 0; font-size: 1rem;
+      color: #ff6b6b; transition: opacity 0.15s;
+      width: var(--cell); height: 26px;
+    }
+    .arrow-cell.p2c { color: #ffd93d; }
+    .arrow-cell:hover, .arrow-cell.active { opacity: 1; }
+    .arrow-cell.active { animation: bounce 0.4s infinite alternate; }
+    @keyframes bounce { from{transform:translateY(0)} to{transform:translateY(5px)} }
+
+    /* Board */
+    :root { --cell: 70px; --gap: 8px; }
+
+    #board-wrapper {
+      background: #1565c0;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,50,.6), 0 0 0 4px #0d47a1;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(7, var(--cell));
+      grid-template-rows: repeat(6, var(--cell));
+      gap: var(--gap);
+    }
+    .cell {
+      width: var(--cell); height: var(--cell);
+      border-radius: 50%;
+      background: #1a1a2e;
+      box-shadow: inset 0 4px 10px rgba(0,0,0,.5);
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .cell.hover-col { background: #252545; }
+    .cell.p1 {
+      background: radial-gradient(circle at 35% 35%, #ff9999, #e53935);
+      box-shadow: inset 0 -3px 6px rgba(0,0,0,.3), 0 0 12px rgba(229,57,53,.4);
+    }
+    .cell.p2 {
+      background: radial-gradient(circle at 35% 35%, #fff176, #fdd835);
+      box-shadow: inset 0 -3px 6px rgba(0,0,0,.3), 0 0 12px rgba(253,216,53,.4);
+    }
+    .cell.win-piece { animation: pulse .6s ease-in-out infinite alternate; }
+    @keyframes pulse {
+      from { transform:scale(1);   box-shadow: inset 0 -3px 6px rgba(0,0,0,.3),0 0 12px rgba(255,255,255,.2); }
+      to   { transform:scale(1.1); box-shadow: inset 0 -3px 6px rgba(0,0,0,.3),0 0 24px rgba(255,255,255,.6); }
+    }
+    @keyframes dropIn {
+      from { transform:translateY(-400px); opacity:.4; }
+      to   { transform:translateY(0); opacity:1; }
+    }
+    .cell.drop { animation: dropIn .35s cubic-bezier(.4,0,.2,1); }
+
+    /* Game controls */
+    #game-controls { display: flex; gap: 10px; margin-top: 20px; }
+    .ctrl-btn {
+      padding: 10px 22px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      transition: transform .15s;
+      letter-spacing: 0.5px;
+    }
+    .ctrl-btn:active { transform: scale(0.95); }
+    .ctrl-btn.blue  { background: linear-gradient(135deg,#42a5f5,#1565c0); color:#fff; }
+    .ctrl-btn.ghost { background: rgba(255,255,255,.1); color:#bbb; border:1px solid rgba(255,255,255,.15); }
+
+    /* Legend */
+    #legend { display: flex; gap: 22px; margin-top: 14px; font-size: 0.85rem; color: #888; }
+    .legend-item { display: flex; align-items: center; gap: 7px; }
+    .dot-lg { width: 16px; height: 16px; border-radius: 50%; }
+    .dot-lg.p1 { background: radial-gradient(circle at 35% 35%,#ff9999,#e53935); }
+    .dot-lg.p2 { background: radial-gradient(circle at 35% 35%,#fff176,#fdd835); }
+
+    /* ── Responsive: small phones ────────────────────────────────────────── */
+    @media (max-width: 540px) {
+      :root { --cell: 42px; --gap: 5px; }
+      h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════ MENU ══════════════════════════════ -->
+<div id="screen-menu" class="screen active">
+  <h1>CONNECT FOUR</h1>
+  <p class="subtitle">Choose a game mode</p>
+
+  <button class="menu-btn cpu" onclick="startCPU()">
+    <span class="menu-icon">🤖</span>
+    <div>
+      <div>vs Computer</div>
+      <div class="menu-sub">Medium difficulty AI</div>
+    </div>
+  </button>
+
+  <button class="menu-btn local" onclick="startLocal()">
+    <span class="menu-icon">📱</span>
+    <div>
+      <div>Pass &amp; Play</div>
+      <div class="menu-sub">Two players, same device</div>
+    </div>
+  </button>
+
+  <button class="menu-btn online" onclick="showOnlineSetup()">
+    <span class="menu-icon">🌐</span>
+    <div>
+      <div>Play Online</div>
+      <div class="menu-sub">Two players, different devices</div>
+    </div>
+  </button>
+</div>
+
+<!-- ════════════════════════════════ ONLINE SETUP ══════════════════════════ -->
+<div id="screen-online" class="screen">
+  <h1>CONNECT FOUR</h1>
+  <p class="subtitle">Online Multiplayer</p>
+
+  <!-- Create game card -->
+  <div class="setup-card">
+    <h3>Create a Game</h3>
+    <div class="room-code" id="display-code">······</div>
+    <p class="code-hint">Share this code with your opponent</p>
+    <div class="conn-row">
+      <div class="dot-sm connecting" id="create-dot"></div>
+      <span id="create-msg">Generating room…</span>
+    </div>
+  </div>
+
+  <div class="divider">— or —</div>
+
+  <!-- Join game card -->
+  <div class="setup-card">
+    <h3>Join a Game</h3>
+    <input class="room-input" id="join-input" maxlength="6" placeholder="XXXXXX"
+           oninput="this.value=this.value.toUpperCase()" />
+    <button class="action-btn primary" onclick="joinGame()">Join Game</button>
+    <div class="conn-row" id="join-status" style="display:none">
+      <div class="dot-sm connecting" id="join-dot"></div>
+      <span id="join-msg"></span>
+    </div>
+  </div>
+
+  <button class="action-btn secondary" style="width:200px;margin-top:14px" onclick="goMenu()">← Back</button>
+</div>
+
+<!-- ════════════════════════════════════ GAME ══════════════════════════════ -->
+<div id="screen-game" class="screen">
+  <div id="game-header">
+    <h1>CONNECT FOUR</h1>
+    <div id="online-badge">
+      <div class="dot-sm connected"></div>
+      <span id="badge-text"></span>
+    </div>
+    <div id="status">…</div>
+  </div>
+
+  <div id="arrows"></div>
+
+  <div id="board-wrapper">
+    <div id="board"></div>
+  </div>
+
+  <div id="game-controls">
+    <button class="ctrl-btn blue"  onclick="requestNewGame()">New Game</button>
+    <button class="ctrl-btn ghost" onclick="goMenu()">Menu</button>
+  </div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="dot-lg p1"></div><span id="lbl-p1">You</span></div>
+    <div class="legend-item"><div class="dot-lg p2"></div><span id="lbl-p2">Computer</span></div>
+  </div>
+</div>
+
+<!-- PeerJS for online multiplayer (loaded from CDN) -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const ROWS = 6, COLS = 7;
+const EMPTY = 0, P1 = 1, P2 = 2;
+const AI_DEPTH = 5;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let board, gameOver, currentPlayer;
+let gameMode;  // 'cpu' | 'local' | 'online'
+let myPiece;   // online only: P1 or P2
+let peer, conn;
+
+// ── Screen navigation ────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goMenu() {
+  destroyPeer();
+  showScreen('screen-menu');
+}
+
+// ── Mode starters ────────────────────────────────────────────────────────────
+function startCPU() {
+  gameMode = 'cpu';
+  document.getElementById('lbl-p1').textContent = 'You';
+  document.getElementById('lbl-p2').textContent = 'Computer';
+  document.getElementById('online-badge').classList.remove('show');
+  showScreen('screen-game');
+  buildDOM();
+  newGame();
+}
+
+function startLocal() {
+  gameMode = 'local';
+  document.getElementById('lbl-p1').textContent = 'Player 1';
+  document.getElementById('lbl-p2').textContent = 'Player 2';
+  document.getElementById('online-badge').classList.remove('show');
+  showScreen('screen-game');
+  buildDOM();
+  newGame();
+}
+
+// ── Online setup ─────────────────────────────────────────────────────────────
+function showOnlineSetup() {
+  showScreen('screen-online');
+  document.getElementById('join-input').value = '';
+  document.getElementById('join-status').style.display = 'none';
+  document.getElementById('display-code').textContent = '······';
+  setCreateStatus('connecting', 'Generating room…');
+  initCreateGame();
+}
+
+function makeCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+function setCreateStatus(state, msg) {
+  document.getElementById('create-dot').className = `dot-sm ${state}`;
+  document.getElementById('create-msg').textContent = msg;
+}
+
+function setJoinStatus(state, msg) {
+  document.getElementById('join-status').style.display = 'flex';
+  document.getElementById('join-dot').className = `dot-sm ${state}`;
+  document.getElementById('join-msg').textContent = msg;
+}
+
+function initCreateGame() {
+  destroyPeer();
+  const code = makeCode();
+  peer = new Peer(`cf4-${code}-h`, { debug: 0 });
+
+  peer.on('open', () => {
+    document.getElementById('display-code').textContent = code;
+    setCreateStatus('connecting', 'Waiting for opponent…');
+  });
+
+  peer.on('connection', c => {
+    conn = c;
+    setupConn();
+    conn.on('open', () => {
+      conn.send({ type: 'welcome' });
+      launchOnlineGame(P1, code);
+    });
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') {
+      setTimeout(initCreateGame, 400); // code taken, retry
+    } else {
+      setCreateStatus('error', 'Could not create room. Try again.');
+    }
+  });
+}
+
+function joinGame() {
+  const code = document.getElementById('join-input').value.trim().toUpperCase();
+  if (code.length !== 6) {
+    setJoinStatus('error', 'Enter the full 6-character code.');
+    return;
+  }
+  destroyPeer();
+  setJoinStatus('connecting', 'Connecting…');
+
+  peer = new Peer(`cf4-${code}-g${Date.now()}`, { debug: 0 });
+
+  peer.on('open', () => {
+    conn = peer.connect(`cf4-${code}-h`, { reliable: true });
+    setupConn();
+    conn.on('data', data => {
+      if (data.type === 'welcome') launchOnlineGame(P2, code);
+      else handleRemote(data);
+    });
+  });
+
+  peer.on('error', () => setJoinStatus('error', 'Connection error. Check the code.'));
+}
+
+function setupConn() {
+  conn.on('close', () => {
+    if (!gameOver) { setStatus('Opponent disconnected.', 'draw'); gameOver = true; }
+  });
+  conn.on('error', () => {
+    if (!gameOver) { setStatus('Connection lost.', 'draw'); gameOver = true; }
+  });
+}
+
+function launchOnlineGame(piece, code) {
+  gameMode = 'online';
+  myPiece  = piece;
+  const isHost = piece === P1;
+
+  document.getElementById('lbl-p1').textContent = isHost ? 'You'      : 'Opponent';
+  document.getElementById('lbl-p2').textContent = isHost ? 'Opponent' : 'You';
+
+  const badge = document.getElementById('online-badge');
+  badge.classList.add('show');
+  document.getElementById('badge-text').textContent =
+    `Room ${code} · You are ${isHost ? 'Red' : 'Yellow'}`;
+
+  // Also wire the conn data handler for the host side
+  if (isHost) conn.on('data', handleRemote);
+
+  showScreen('screen-game');
+  buildDOM();
+  newGame();
+}
+
+function handleRemote(data) {
+  if (data.type === 'move')  doMove(data.col, myPiece === P1 ? P2 : P1);
+  if (data.type === 'reset') newGame();
+}
+
+function sendToOpponent(msg) {
+  if (conn && conn.open) conn.send(msg);
+}
+
+function destroyPeer() {
+  try { conn && conn.close(); } catch(e) {}
+  try { peer && peer.destroy(); } catch(e) {}
+  conn = null; peer = null;
+}
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const boardEl  = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const arrowsEl = document.getElementById('arrows');
+
+function buildDOM() {
+  boardEl.innerHTML = arrowsEl.innerHTML = '';
+
+  for (let c = 0; c < COLS; c++) {
+    const a = document.createElement('div');
+    a.className = 'arrow-cell';
+    a.textContent = '▼';
+    a.dataset.col = c;
+    a.addEventListener('click',      () => handleClick(c));
+    a.addEventListener('mouseenter', () => setHover(c));
+    a.addEventListener('mouseleave', () => setHover(-1));
+    arrowsEl.appendChild(a);
+  }
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.row = r; cell.dataset.col = c;
+      cell.addEventListener('click',      () => handleClick(c));
+      cell.addEventListener('mouseenter', () => setHover(c));
+      cell.addEventListener('mouseleave', () => setHover(-1));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+const getCell = (r, c) => boardEl.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+
+// ── Game ──────────────────────────────────────────────────────────────────────
+function newGame() {
+  board         = Array.from({length: ROWS}, () => Array(COLS).fill(EMPTY));
+  gameOver      = false;
+  currentPlayer = P1;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      getCell(r, c).className = 'cell';
+  refreshStatus();
+}
+
+function requestNewGame() {
+  if (gameMode === 'online') sendToOpponent({ type: 'reset' });
+  newGame();
+}
+
+function refreshStatus() {
+  if (gameMode === 'cpu') {
+    currentPlayer === P1
+      ? setStatus('Your turn — drop a piece', 'p1')
+      : setStatus('Computer is thinking…', 'p2');
+  } else if (gameMode === 'local') {
+    currentPlayer === P1
+      ? setStatus('Player 1 — drop a piece', 'p1')
+      : setStatus('Player 2 — drop a piece', 'p2');
+  } else {
+    currentPlayer === myPiece
+      ? setStatus('Your turn — drop a piece', myPiece === P1 ? 'p1' : 'p2')
+      : setStatus("Opponent's turn…",          myPiece === P1 ? 'p2' : 'p1');
+  }
+}
+
+// ── Click / move ──────────────────────────────────────────────────────────────
+function handleClick(col) {
+  if (gameOver) return;
+  if (board[0][col] !== EMPTY) return;
+  if (gameMode === 'cpu'    && currentPlayer !== P1)       return;
+  if (gameMode === 'online' && currentPlayer !== myPiece)  return;
+
+  setHover(-1);
+  if (gameMode === 'online') sendToOpponent({ type: 'move', col });
+
+  doMove(col, currentPlayer);
+
+  if (!gameOver && gameMode === 'cpu') {
+    setStatus('Computer is thinking…', 'p2');
+    setTimeout(() => { if (!gameOver) doMove(bestMove(board), P2); }, 520);
+  }
+}
+
+function doMove(col, piece) {
+  const row = dropPiece(board, col, piece);
+  if (row === -1) return;
+
+  const cls = piece === P1 ? 'p1' : 'p2';
+  animateDrop(row, col, cls);
+
+  if (checkWin(board, piece)) {
+    highlightWin(piece);
+    const who = gameMode === 'local'  ? `Player ${piece} wins!`
+              : gameMode === 'cpu'    ? (piece === P1 ? '🎉 You win!' : 'Computer wins!')
+              : (piece === myPiece    ? '🎉 You win!' : 'Opponent wins!');
+    setStatus(who, `win ${cls}`);
+    gameOver = true;
+    return;
+  }
+
+  if (isFull(board)) { setStatus("It's a draw!", 'draw'); gameOver = true; return; }
+
+  currentPlayer = currentPlayer === P1 ? P2 : P1;
+  refreshStatus();
+}
+
+// ── Hover ─────────────────────────────────────────────────────────────────────
+function setHover(col) {
+  const canMove = !gameOver
+    && (gameMode !== 'cpu'    || currentPlayer === P1)
+    && (gameMode !== 'online' || currentPlayer === myPiece);
+
+  const arrowBase = canMove && currentPlayer === P2 ? 'arrow-cell p2c' : 'arrow-cell';
+
+  for (let c = 0; c < COLS; c++) {
+    const a = arrowsEl.children[c];
+    if (canMove) {
+      a.className = arrowBase;
+      if (c === col) a.classList.add('active');
+    }
+    for (let r = 0; r < ROWS; r++) {
+      const cell = getCell(r, c);
+      if (!cell.classList.contains('p1') && !cell.classList.contains('p2'))
+        cell.classList.toggle('hover-col', canMove && c === col);
+    }
+  }
+}
+
+// ── Board helpers ─────────────────────────────────────────────────────────────
+function dropPiece(b, col, piece) {
+  for (let r = ROWS-1; r >= 0; r--)
+    if (b[r][col] === EMPTY) { b[r][col] = piece; return r; }
+  return -1;
+}
+
+function isFull(b) { return b[0].every(v => v !== EMPTY); }
+
+function checkWin(b, p) { return !!findWin(b, p); }
+
+function findWin(b, p) {
+  for (let r=0;r<ROWS;r++)
+    for (let c=0;c<=COLS-4;c++)
+      if (b[r][c]===p&&b[r][c+1]===p&&b[r][c+2]===p&&b[r][c+3]===p)
+        return [[r,c],[r,c+1],[r,c+2],[r,c+3]];
+  for (let r=0;r<=ROWS-4;r++)
+    for (let c=0;c<COLS;c++)
+      if (b[r][c]===p&&b[r+1][c]===p&&b[r+2][c]===p&&b[r+3][c]===p)
+        return [[r,c],[r+1,c],[r+2,c],[r+3,c]];
+  for (let r=3;r<ROWS;r++)
+    for (let c=0;c<=COLS-4;c++)
+      if (b[r][c]===p&&b[r-1][c+1]===p&&b[r-2][c+2]===p&&b[r-3][c+3]===p)
+        return [[r,c],[r-1,c+1],[r-2,c+2],[r-3,c+3]];
+  for (let r=0;r<=ROWS-4;r++)
+    for (let c=0;c<=COLS-4;c++)
+      if (b[r][c]===p&&b[r+1][c+1]===p&&b[r+2][c+2]===p&&b[r+3][c+3]===p)
+        return [[r,c],[r+1,c+1],[r+2,c+2],[r+3,c+3]];
+  return null;
+}
+
+function validCols(b) { return [...Array(COLS).keys()].filter(c => b[0][c] === EMPTY); }
+
+// ── AI ────────────────────────────────────────────────────────────────────────
+function scoreWindow(w, piece) {
+  const opp = piece===P2 ? P1 : P2;
+  const mine  = w.filter(x=>x===piece).length;
+  const empty = w.filter(x=>x===EMPTY).length;
+  const theirs= w.filter(x=>x===opp).length;
+  if (mine===4)              return  1000;
+  if (mine===3&&empty===1)   return     5;
+  if (mine===2&&empty===2)   return     2;
+  if (theirs===3&&empty===1) return    -4;
+  return 0;
+}
+
+function scoreBoard(b) {
+  let s = 0;
+  const mid = Math.floor(COLS/2);
+  for (let r=0;r<ROWS;r++) if (b[r][mid]===P2) s+=3;
+  for (let r=0;r<ROWS;r++)
+    for (let c=0;c<=COLS-4;c++)
+      s+=scoreWindow([b[r][c],b[r][c+1],b[r][c+2],b[r][c+3]],P2);
+  for (let r=0;r<=ROWS-4;r++)
+    for (let c=0;c<COLS;c++)
+      s+=scoreWindow([b[r][c],b[r+1][c],b[r+2][c],b[r+3][c]],P2);
+  for (let r=3;r<ROWS;r++)
+    for (let c=0;c<=COLS-4;c++)
+      s+=scoreWindow([b[r][c],b[r-1][c+1],b[r-2][c+2],b[r-3][c+3]],P2);
+  for (let r=0;r<=ROWS-4;r++)
+    for (let c=0;c<=COLS-4;c++)
+      s+=scoreWindow([b[r][c],b[r+1][c+1],b[r+2][c+2],b[r+3][c+3]],P2);
+  return s;
+}
+
+function isTerminal(b) { return checkWin(b,P1)||checkWin(b,P2)||isFull(b); }
+
+function minimax(b, depth, alpha, beta, maximizing) {
+  const valid = validCols(b).sort((a,x)=>Math.abs(a-3)-Math.abs(x-3));
+  if (depth===0||isTerminal(b)) {
+    if (checkWin(b,P2)) return [null,  1e9];
+    if (checkWin(b,P1)) return [null, -1e9];
+    if (isFull(b))      return [null,  0];
+    return [null, scoreBoard(b)];
+  }
+  if (maximizing) {
+    let best=-Infinity, col=valid[0];
+    for (const c of valid) {
+      const copy=b.map(r=>[...r]); dropPiece(copy,c,P2);
+      const sc=minimax(copy,depth-1,alpha,beta,false)[1];
+      if (sc>best){best=sc;col=c;} alpha=Math.max(alpha,best);
+      if (alpha>=beta) break;
+    }
+    return [col,best];
+  } else {
+    let best=Infinity, col=valid[0];
+    for (const c of valid) {
+      const copy=b.map(r=>[...r]); dropPiece(copy,c,P1);
+      const sc=minimax(copy,depth-1,alpha,beta,true)[1];
+      if (sc<best){best=sc;col=c;} beta=Math.min(beta,best);
+      if (alpha>=beta) break;
+    }
+    return [col,best];
+  }
+}
+
+function bestMove(b) { return minimax(b, AI_DEPTH, -Infinity, Infinity, true)[0]; }
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+function animateDrop(row, col, cls) {
+  const cell = getCell(row, col);
+  cell.className = `cell ${cls} drop`;
+  cell.addEventListener('animationend', () => cell.classList.remove('drop'), { once: true });
+}
+
+function highlightWin(piece) {
+  const cells = findWin(board, piece);
+  if (cells) cells.forEach(([r,c]) => getCell(r,c).classList.add('win-piece'));
+}
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className   = cls;
+}
+
+</script>
+</body>
+</html>
